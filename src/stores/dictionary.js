@@ -15,7 +15,7 @@ export const useDictionaryStore = defineStore('dictionary', () => {
   // 初始化索引
   async function initIndex() {
     if (index.value) return
-    
+
     loading.value = true
     error.value = null
     try {
@@ -71,11 +71,27 @@ export const useDictionaryStore = defineStore('dictionary', () => {
     error.value = null
     try {
       randomWords.value = await dict.getRandomWords(count)
-      return randomWords.value  // 返回随机单词数组
+      return randomWords.value
     } catch (err) {
       error.value = '获取随机单词失败: ' + err.message
       console.error(err)
-      return []  // 错误时返回空数组
+      return []
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 获取主题随机单词
+  async function loadRandomTopicWords(topic, count = 10) {
+    loading.value = true
+    error.value = null
+    try {
+      randomWords.value = await dict.getRandomTopicWords(topic, count)
+      return randomWords.value
+    } catch (err) {
+      error.value = `获取主题单词失败(${topic}): ` + err.message
+      console.error(err)
+      return []
     } finally {
       loading.value = false
     }
@@ -103,8 +119,8 @@ export const useDictionaryStore = defineStore('dictionary', () => {
     search,
     getWordDetail,
     loadRandomWords,
+    loadRandomTopicWords,
     clearSearch,
     clearError
   }
 })
-

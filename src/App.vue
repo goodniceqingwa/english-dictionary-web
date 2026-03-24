@@ -30,6 +30,13 @@
                 学习
               </router-link>
               <router-link 
+                to="/study/computer" 
+                class="nav-link"
+                :class="{ 'active': $route.name === 'ComputerStudy' }"
+              >
+                计算机英语
+              </router-link>
+              <router-link 
                 v-if="userStore.isAuthenticated"
                 to="/review" 
                 class="nav-link"
@@ -114,6 +121,13 @@
               @click="mobileMenuOpen = false"
             >
               学习
+            </router-link>
+            <router-link 
+              to="/study/computer" 
+              class="block px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              @click="mobileMenuOpen = false"
+            >
+              计算机英语
             </router-link>
             <router-link 
               v-if="userStore.isAuthenticated"

@@ -15,6 +15,12 @@ const routes = [
     meta: { title: '学习' }
   },
   {
+    path: '/study/computer',
+    name: 'ComputerStudy',
+    component: () => import('@/views/ComputerStudy.vue'),
+    meta: { title: '计算机英语学习' }
+  },
+  {
     path: '/review',
     name: 'Review',
     component: () => import('@/views/Review.vue'),
@@ -60,7 +66,7 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
-  
+
   // 设置页面标题
   document.title = to.meta.title ? `${to.meta.title} - 英汉词典` : '英汉词典'
 
@@ -73,4 +79,3 @@ router.beforeEach((to, from, next) => {
 })
 
 export default router
-
