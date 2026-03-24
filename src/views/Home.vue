@@ -52,7 +52,7 @@
     </div>
 
     <!-- 快速开始 -->
-    <div class="grid md:grid-cols-3 gap-6 mb-12">
+    <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
       <router-link 
         to="/study"
         class="card hover:shadow-xl transition-shadow cursor-pointer group"
@@ -82,6 +82,23 @@
             </h3>
             <p class="text-gray-600 dark:text-gray-400 mt-1">
               聚焦计算机相关英语词汇
+            </p>
+          </div>
+        </div>
+      </router-link>
+
+      <router-link 
+        to="/shadow"
+        class="card hover:shadow-xl transition-shadow cursor-pointer group"
+      >
+        <div class="flex items-center justify-center space-x-4 w-full">
+          <div class="text-5xl">🗣️</div>
+          <div class="flex-1 text-center">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+              跟读训练
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">
+              程序员场景句库，已掌握 {{ shadowStore.totalMasteredSentences }} 句
             </p>
           </div>
         </div>
@@ -284,10 +301,12 @@ import { ref, onMounted } from 'vue'
 import SearchBar from '@/components/SearchBar.vue'
 import { useDictionaryStore } from '@/stores/dictionary'
 import { useLearningStore } from '@/stores/learning'
+import { useShadowStore } from '@/stores/shadow'
 import { useUserStore } from '@/stores/user'
 
 const dictionaryStore = useDictionaryStore()
 const learningStore = useLearningStore()
+const shadowStore = useShadowStore()
 const userStore = useUserStore()
 
 const randomWords = ref([])

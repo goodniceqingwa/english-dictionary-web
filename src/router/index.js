@@ -27,6 +27,12 @@ const routes = [
     meta: { title: '计算机英语学习' }
   },
   {
+    path: '/shadow',
+    name: 'Shadow',
+    component: () => import('@/views/Shadow.vue'),
+    meta: { title: '跟读训练' }
+  },
+  {
     path: '/review',
     name: 'Review',
     component: () => import('@/views/Review.vue'),

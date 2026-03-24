@@ -37,6 +37,13 @@
                 计算机英语
               </router-link>
               <router-link 
+                to="/shadow" 
+                class="nav-link"
+                :class="{ 'active': $route.name === 'Shadow' }"
+              >
+                跟读训练
+              </router-link>
+              <router-link 
                 v-if="userStore.isAuthenticated"
                 to="/review" 
                 class="nav-link"
@@ -128,6 +135,13 @@
               @click="mobileMenuOpen = false"
             >
               计算机英语
+            </router-link>
+            <router-link 
+              to="/shadow" 
+              class="block px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              @click="mobileMenuOpen = false"
+            >
+              跟读训练
             </router-link>
             <router-link 
               v-if="userStore.isAuthenticated"
@@ -288,4 +302,3 @@ onMounted(async () => {
   @apply text-primary-600 dark:text-primary-400;
 }
 </style>
-
