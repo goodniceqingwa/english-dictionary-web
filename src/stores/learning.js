@@ -20,13 +20,24 @@ export const useLearningStore = defineStore('learning', () => {
   const error = ref(null)
   const isSyncing = ref(false)
 
+  // 学习会话状态（用于前后导航与测试）
+  const sessionQueue = ref([])
+  const sessionWordMap = ref({})
+  const currentSessionIndex = ref(-1)
+  const learnedWordsInSession = ref([])
+
   const dueWords = computed(() => {
     const now = new Date()
     return progressList.value.filter(p => new Date(p.next_review) <= now)
   })
 
-  const collectedWords = computed(() => 
+  const collectedWords = computed(() =>
     collectionList.value.map(c => c.word)
+  )
+
+  const hasPreviousSessionWord = computed(() => currentSessionIndex.value > 0)
+  const hasNextSessionWord = computed(() =>
+    currentSessionIndex.value >= 0 && currentSessionIndex.value < sessionQueue.value.length - 1
   )
 
   // 监听用户变化，加载缓存或清除数据
@@ -44,6 +55,7 @@ export const useLearningStore = defineStore('learning', () => {
         dueWords: 0,
         masteredWords: 0
       }
+      resetStudySession()
     }
   })
 
@@ -52,13 +64,13 @@ export const useLearningStore = defineStore('learning', () => {
     if (!userStore.user) return
 
     const userId = userStore.user.id
-    
+
     // 加载收藏缓存
     const cachedCollections = getCache(userId, 'collections')
     if (cachedCollections) {
       collectionList.value = cachedCollections
     }
-    
+
     // 加载进度缓存
     const cachedProgress = getCache(userId, 'progress')
     if (cachedProgress) {
@@ -93,22 +105,93 @@ export const useLearningStore = defineStore('learning', () => {
     }
   }
 
+  // 学习会话：新增/更新当前词
+  function addSessionWord(wordDetail) {
+    if (!wordDetail || !wordDetail.word) return
+
+    const word = wordDetail.word
+    const index = sessionQueue.value.indexOf(word)
+
+    sessionWordMap.value[word] = wordDetail
+
+    if (index === -1) {
+      sessionQueue.value.push(word)
+      currentSessionIndex.value = sessionQueue.value.length - 1
+    } else {
+      currentSessionIndex.value = index
+    }
+  }
+
+  // 学习会话：标记已学
+  function markLearnedInSession(word) {
+    if (!word) return
+    if (!learnedWordsInSession.value.includes(word)) {
+      learnedWordsInSession.value.push(word)
+    }
+  }
+
+  // 学习会话：获取当前词详情
+  function getCurrentSessionWordDetail() {
+    if (currentSessionIndex.value < 0 || currentSessionIndex.value >= sessionQueue.value.length) {
+      return null
+    }
+
+    const word = sessionQueue.value[currentSessionIndex.value]
+    return sessionWordMap.value[word] || null
+  }
+
+  // 学习会话：回退
+  function goToPreviousSessionWord() {
+    if (!hasPreviousSessionWord.value) {
+      return null
+    }
+
+    currentSessionIndex.value -= 1
+    return getCurrentSessionWordDetail()
+  }
+
+  // 学习会话：前进
+  function goToNextSessionWord() {
+    if (!hasNextSessionWord.value) {
+      return null
+    }
+
+    currentSessionIndex.value += 1
+    return getCurrentSessionWordDetail()
+  }
+
+  // 学习会话：按单词定位
+  function setCurrentSessionWord(word) {
+    const index = sessionQueue.value.indexOf(word)
+    if (index === -1) return null
+
+    currentSessionIndex.value = index
+    return getCurrentSessionWordDetail()
+  }
+
+  function resetStudySession() {
+    sessionQueue.value = []
+    sessionWordMap.value = {}
+    currentSessionIndex.value = -1
+    learnedWordsInSession.value = []
+  }
+
   // 与服务器同步
   async function syncWithServer() {
     if (!userStore.user || isSyncing.value) return
 
     isSyncing.value = true
-    
+
     try {
       // 先处理待同步队列
       await processSyncQueue()
-      
+
       // 然后从服务器拉取最新数据
       await Promise.all([
         syncCollections(),
         syncProgress()
       ])
-      
+
       // 保存到本地缓存
       saveToCache()
     } catch (err) {
@@ -144,13 +227,13 @@ export const useLearningStore = defineStore('learning', () => {
   // 处理同步队列
   async function processSyncQueue() {
     const queue = getSyncQueue()
-    
+
     for (let i = queue.length - 1; i >= 0; i--) {
       const item = queue[i]
-      
+
       // 只处理当前用户的队列
       if (item.userId !== userStore.user.id) continue
-      
+
       try {
         if (item.action === 'addCollection') {
           await collections.addCollection(item.userId, item.data.word)
@@ -159,7 +242,7 @@ export const useLearningStore = defineStore('learning', () => {
         } else if (item.action === 'updateProgress') {
           await progress.updateProgress(item.userId, item.data.word, item.data.progressData)
         }
-        
+
         // 成功后从队列移除
         removeFromSyncQueue(i)
       } catch (err) {
@@ -193,7 +276,7 @@ export const useLearningStore = defineStore('learning', () => {
       created_at: new Date().toISOString()
     }
     collectionList.value.unshift(newItem)
-    
+
     // 保存到缓存
     saveToCache()
 
@@ -216,7 +299,7 @@ export const useLearningStore = defineStore('learning', () => {
 
     // 立即更新本地状态
     collectionList.value = collectionList.value.filter(c => c.word !== word)
-    
+
     // 保存到缓存
     saveToCache()
 
@@ -259,7 +342,7 @@ export const useLearningStore = defineStore('learning', () => {
     try {
       // 查找当前进度
       const existingProgress = progressList.value.find(p => p.word === word)
-      
+
       // 计算新的复习参数
       const newData = calculateNextReview(
         existingProgress?.ease_factor || 2.5,
@@ -271,8 +354,8 @@ export const useLearningStore = defineStore('learning', () => {
       // 立即更新本地状态（乐观更新）
       const index = progressList.value.findIndex(p => p.word === word)
       if (index >= 0) {
-        progressList.value[index] = { 
-          ...progressList.value[index], 
+        progressList.value[index] = {
+          ...progressList.value[index],
           ...newData,
           last_reviewed: new Date().toISOString()
         }
@@ -285,16 +368,19 @@ export const useLearningStore = defineStore('learning', () => {
         })
       }
 
+      // 记入会话已学词
+      markLearnedInSession(word)
+
       // 重新计算统计
       calculateStats()
-      
+
       // 保存到缓存
       saveToCache()
 
       // 添加到同步队列
-      addToSyncQueue(userStore.user.id, 'updateProgress', { 
-        word, 
-        progressData: newData 
+      addToSyncQueue(userStore.user.id, 'updateProgress', {
+        word,
+        progressData: newData
       })
 
       // 后台同步
@@ -346,6 +432,7 @@ export const useLearningStore = defineStore('learning', () => {
       dueWords: 0,
       masteredWords: 0
     }
+    resetStudySession()
   }
 
   return {
@@ -357,6 +444,19 @@ export const useLearningStore = defineStore('learning', () => {
     loading,
     error,
     isSyncing,
+    sessionQueue,
+    sessionWordMap,
+    currentSessionIndex,
+    learnedWordsInSession,
+    hasPreviousSessionWord,
+    hasNextSessionWord,
+    addSessionWord,
+    markLearnedInSession,
+    getCurrentSessionWordDetail,
+    goToPreviousSessionWord,
+    goToNextSessionWord,
+    setCurrentSessionWord,
+    resetStudySession,
     loadCollections,
     addCollection,
     removeCollection,

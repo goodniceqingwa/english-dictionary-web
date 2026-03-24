@@ -15,6 +15,12 @@ const routes = [
     meta: { title: '学习' }
   },
   {
+    path: '/study/quiz',
+    name: 'StudyQuiz',
+    component: () => import('@/views/StudyQuiz.vue'),
+    meta: { title: '学习测试' }
+  },
+  {
     path: '/study/computer',
     name: 'ComputerStudy',
     component: () => import('@/views/ComputerStudy.vue'),

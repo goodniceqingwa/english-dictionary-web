@@ -23,12 +23,12 @@
             <span>加载音标中...</span>
           </div>
           <!-- 简洁定义（模糊点击显示） -->
-          <div 
-            v-if="currentWord.concise_definition" 
+          <div
+            v-if="currentWord.concise_definition"
             class="concise-definition-wrapper"
             @click="showConciseDefinition = !showConciseDefinition"
           >
-            <div 
+            <div
               :class="[
                 'concise-definition-text',
                 showConciseDefinition ? 'revealed' : 'blurred'
@@ -44,8 +44,8 @@
 
         <!-- 发音和收藏按钮 -->
         <div class="action-buttons">
-          <SpeakerButton 
-            :word="currentWord.word" 
+          <SpeakerButton
+            :word="currentWord.word"
             :text="currentWord.word"
             :lang="'en'"
             :speed="1.0"
@@ -64,10 +64,26 @@
           <p v-else class="login-hint">登录后可收藏单词</p>
         </div>
 
+        <div class="session-navigation">
+          <button
+            class="btn btn-outline text-sm"
+            :disabled="!learningStore.hasPreviousSessionWord"
+            @click="goToPreviousWord"
+          >
+            上一个单词
+          </button>
+          <button
+            class="btn btn-primary text-sm"
+            @click="goToNextWord"
+          >
+            下一个单词
+          </button>
+        </div>
+
         <!-- 掌握程度选择（桌面端） -->
         <div class="quality-selection-desktop">
           <h3 class="quality-title">您对这个单词的掌握程度是？</h3>
-          
+
           <div class="quality-buttons">
             <button
               v-for="(option, index) in qualityOptions"
@@ -118,7 +134,7 @@
                 <div class="example-cn">{{ def.example_cn }}</div>
               </div>
             </div>
-            
+
             <!-- 词形变化 -->
             <div v-if="currentWord.forms && Object.keys(currentWord.forms).length > 0" class="forms-section">
               <h4 class="forms-title">词形变化</h4>
@@ -133,7 +149,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- 相似词辨析 -->
             <div v-if="currentWord.comparison && currentWord.comparison.length > 0" class="comparison-section">
               <h4 class="comparison-title">相似词辨析</h4>
@@ -204,15 +220,30 @@
       <p class="text-sm md:text-base text-gray-600 dark:text-gray-400">
         本次已学习 <span class="text-xl md:text-2xl font-bold text-primary-600 dark:text-primary-400">{{ learnedCount }}</span> 个单词
       </p>
-      <button @click="loadRandomWord" class="btn btn-primary mt-3 md:mt-4 text-sm md:text-base">
+      <button @click="goToNextWord" class="btn btn-primary mt-3 md:mt-4 text-sm md:text-base">
         继续学习
+      </button>
+      <router-link
+        v-if="canStartQuiz"
+        to="/study/quiz"
+        class="btn btn-outline mt-3 ml-0 md:ml-2 text-sm md:text-base"
+      >
+        开始测试
+      </router-link>
+      <button
+        v-else
+        class="btn btn-outline mt-3 ml-0 md:ml-2 text-sm md:text-base opacity-50 cursor-not-allowed"
+        disabled
+        title="先学习再测试"
+      >
+        开始测试
       </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import SpeakerButton from '@/components/SpeakerButton.vue'
 import { useDictionaryStore } from '@/stores/dictionary'
 import { useLearningStore } from '@/stores/learning'
@@ -241,16 +272,34 @@ const isCollected = computed(() => {
   return learningStore.isCollected(currentWord.value.word)
 })
 
+const canStartQuiz = computed(() => learningStore.learnedWordsInSession.length > 0)
+
+function resetWordPanels() {
+  showDefinition.value = false
+  showConciseDefinition.value = false
+}
+
+async function applyWord(wordData, { trackInSession = true } = {}) {
+  if (!wordData) return
+
+  currentWord.value = wordData
+  if (trackInSession) {
+    learningStore.addSessionWord(wordData)
+  }
+  resetWordPanels()
+  await fetchPhonetic()
+}
+
 // 获取音标
 async function fetchPhonetic() {
   if (!currentWord.value) return
-  
+
   phoneticLoading.value = true
   try {
     const phonetic = await getPhonetic(currentWord.value.word, currentWord.value.pronunciation)
     currentPhonetic.value = phonetic
-  } catch (error) {
-    console.error('获取音标失败:', error)
+  } catch (err) {
+    console.error('获取音标失败:', err)
     currentPhonetic.value = currentWord.value.pronunciation || ''
   } finally {
     phoneticLoading.value = false
@@ -261,16 +310,17 @@ async function fetchPhonetic() {
 async function loadRandomWord() {
   loading.value = true
   error.value = null
-  showDefinition.value = false
-  showConciseDefinition.value = false // 重置简洁定义显示状态
-  
+  resetWordPanels()
+
   try {
     const words = await dictionaryStore.loadRandomWords(1)
     if (words && words.length > 0) {
       const wordData = await dictionaryStore.getWordDetail(words[0].word)
-      currentWord.value = wordData
-      // 获取音标
-      await fetchPhonetic()
+      if (!wordData) {
+        error.value = '无法加载单词详情'
+        return
+      }
+      await applyWord(wordData, { trackInSession: true })
     } else {
       error.value = '无法加载单词'
     }
@@ -282,11 +332,47 @@ async function loadRandomWord() {
   }
 }
 
+async function goToPreviousWord() {
+  const previousWord = learningStore.goToPreviousSessionWord()
+  if (!previousWord) return
+
+  loading.value = true
+  error.value = null
+  try {
+    await applyWord(previousWord, { trackInSession: false })
+  } catch (err) {
+    error.value = '加载上一个单词失败: ' + err.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function goToNextWord() {
+  const nextWord = learningStore.goToNextSessionWord()
+  if (!nextWord) {
+    await loadRandomWord()
+    return
+  }
+
+  loading.value = true
+  error.value = null
+  try {
+    await applyWord(nextWord, { trackInSession: false })
+  } catch (err) {
+    error.value = '加载下一个单词失败: ' + err.message
+  } finally {
+    loading.value = false
+  }
+}
+
 // 标记单词
 async function markWord(quality) {
   if (!currentWord.value || submitting.value) return
 
   submitting.value = true
+
+  // 本会话已学记录（不依赖登录）
+  learningStore.markLearnedInSession(currentWord.value.word)
 
   // 如果已登录，保存学习进度
   if (userStore.isAuthenticated) {
@@ -299,9 +385,9 @@ async function markWord(quality) {
   learnedCount.value++
   submitting.value = false
 
-  // 加载下一个单词
+  // 加载下一个单词（优先会话中的下一个）
   setTimeout(() => {
-    loadRandomWord()
+    goToNextWord()
   }, 300)
 }
 
@@ -319,11 +405,11 @@ async function toggleCollection() {
 // 键盘快捷键处理
 function handleKeyPress(e) {
   if (submitting.value) return
-  
+
   // 数字键 1-3 对应掌握程度
   if (e.key >= '1' && e.key <= '3') {
     e.preventDefault()
-    const qualityIndex = parseInt(e.key) - 1
+    const qualityIndex = parseInt(e.key, 10) - 1
     if (qualityIndex < qualityOptions.length) {
       markWord(qualityOptions[qualityIndex].value)
     }
@@ -339,7 +425,6 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyPress)
 })
 </script>
-
 <style scoped>
 /* 主容器 */
 .study-container {
