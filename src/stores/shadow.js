@@ -3,6 +3,14 @@ import { ref, computed } from 'vue'
 import { shadowScenarios } from '@/data/shadow-scenarios'
 
 const SHADOW_PROGRESS_KEY = 'devspeak_shadow_progress_v1'
+const SHADOW_DAILY_KEY = 'devspeak_shadow_daily_v1'
+
+function getTodayDateString() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
 
 function createDefaultProgress() {
   const progress = {}
@@ -42,6 +50,28 @@ function normalizeProgress(raw) {
   return next
 }
 
+function getDefaultDailyProgress(date = getTodayDateString()) {
+  return {
+    date,
+    masteredSentenceIds: []
+  }
+}
+
+function normalizeDailyProgress(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return getDefaultDailyProgress()
+  }
+
+  const ids = Array.isArray(raw.masteredSentenceIds)
+    ? Array.from(new Set(raw.masteredSentenceIds.filter(Boolean)))
+    : []
+
+  return {
+    date: raw.date || getTodayDateString(),
+    masteredSentenceIds: ids
+  }
+}
+
 function loadShadowProgress() {
   try {
     const raw = localStorage.getItem(SHADOW_PROGRESS_KEY)
@@ -56,9 +86,24 @@ function loadShadowProgress() {
   }
 }
 
+function loadShadowDailyProgress() {
+  try {
+    const raw = localStorage.getItem(SHADOW_DAILY_KEY)
+    if (!raw) {
+      return getDefaultDailyProgress()
+    }
+
+    return normalizeDailyProgress(JSON.parse(raw))
+  } catch (error) {
+    console.warn('读取跟读每日进度失败:', error)
+    return getDefaultDailyProgress()
+  }
+}
+
 export const useShadowStore = defineStore('shadow', () => {
   const activeSceneId = ref(shadowScenarios[0]?.id || '')
   const shadowProgress = ref(loadShadowProgress())
+  const dailyProgress = ref(loadShadowDailyProgress())
 
   const sceneList = computed(() => shadowScenarios)
 
@@ -72,6 +117,11 @@ export const useShadowStore = defineStore('shadow', () => {
       return total + completed.length
     }, 0)
   )
+
+  const todayMasteredCount = computed(() => {
+    ensureDailyProgressToday()
+    return dailyProgress.value.masteredSentenceIds.length
+  })
 
   const sceneProgressSummary = computed(() =>
     shadowScenarios.map(scene => {
@@ -100,6 +150,24 @@ export const useShadowStore = defineStore('shadow', () => {
     } catch (error) {
       console.warn('保存跟读进度失败:', error)
     }
+  }
+
+  function saveShadowDailyProgress() {
+    try {
+      localStorage.setItem(SHADOW_DAILY_KEY, JSON.stringify(dailyProgress.value))
+    } catch (error) {
+      console.warn('保存跟读每日进度失败:', error)
+    }
+  }
+
+  function ensureDailyProgressToday() {
+    const today = getTodayDateString()
+    if (dailyProgress.value.date === today) {
+      return
+    }
+
+    dailyProgress.value = getDefaultDailyProgress(today)
+    saveShadowDailyProgress()
   }
 
   function setActiveScene(sceneId) {
@@ -148,6 +216,12 @@ export const useShadowStore = defineStore('shadow', () => {
     progress.lastPracticed = new Date().toISOString()
     shadowProgress.value[sceneId] = progress
     saveShadowProgress()
+
+    ensureDailyProgressToday()
+    if (!dailyProgress.value.masteredSentenceIds.includes(sentenceId)) {
+      dailyProgress.value.masteredSentenceIds.push(sentenceId)
+      saveShadowDailyProgress()
+    }
   }
 
   function unmarkSentenceMastered(sceneId, sentenceId) {
@@ -156,6 +230,10 @@ export const useShadowStore = defineStore('shadow', () => {
     progress.lastPracticed = new Date().toISOString()
     shadowProgress.value[sceneId] = progress
     saveShadowProgress()
+
+    ensureDailyProgressToday()
+    dailyProgress.value.masteredSentenceIds = dailyProgress.value.masteredSentenceIds.filter(id => id !== sentenceId)
+    saveShadowDailyProgress()
   }
 
   function toggleSentenceMastered(sceneId, sentenceId) {
@@ -170,7 +248,9 @@ export const useShadowStore = defineStore('shadow', () => {
 
   function resetShadowProgress() {
     shadowProgress.value = createDefaultProgress()
+    dailyProgress.value = getDefaultDailyProgress()
     saveShadowProgress()
+    saveShadowDailyProgress()
   }
 
   return {
@@ -179,6 +259,7 @@ export const useShadowStore = defineStore('shadow', () => {
     sceneList,
     totalSentenceCount,
     totalMasteredSentences,
+    todayMasteredCount,
     sceneProgressSummary,
     scenesAtSixtyPercent,
     flashcardUnlocked,

@@ -85,8 +85,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useLearningStore } from '@/stores/learning'
+import { recordQuizAttempt } from '@/utils/devspeak-stats'
 
 const learningStore = useLearningStore()
 
@@ -95,6 +96,7 @@ const questions = ref([])
 const answers = ref([])
 const selectedOption = ref('')
 const spellingInput = ref('')
+const hasRecordedAttempt = ref(false)
 
 const hasLearnedWords = computed(() => learningStore.learnedWordsInSession.length > 0)
 const currentQuestion = computed(() => questions.value[currentQuestionIndex.value] || null)
@@ -194,12 +196,19 @@ function submitAnswer() {
 }
 
 function restartQuiz() {
+  hasRecordedAttempt.value = false
   questions.value = buildQuestions()
   answers.value = []
   currentQuestionIndex.value = 0
   selectedOption.value = ''
   spellingInput.value = ''
 }
+
+watch(quizCompleted, (completed) => {
+  if (!completed || hasRecordedAttempt.value) return
+  recordQuizAttempt()
+  hasRecordedAttempt.value = true
+})
 
 if (hasLearnedWords.value) {
   restartQuiz()

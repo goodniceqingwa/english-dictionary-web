@@ -51,6 +51,62 @@
       </div>
     </div>
 
+
+    <div class="card mb-12">
+      <p class="font-mono text-sm text-blue-600 dark:text-blue-300 mb-4">$ welcome --user developer</p>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-5">学习路径</h2>
+
+      <div class="space-y-4 mb-6">
+        <div>
+          <div class="flex items-center justify-between text-sm mb-2">
+            <span class="font-medium text-gray-700 dark:text-gray-300">Phase 1 · Shadow 跟读</span>
+            <span class="text-gray-500 dark:text-gray-400">{{ formatPercent(phase1Rate) }}</span>
+          </div>
+          <div class="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <div class="h-full bg-blue-500" :style="{ width: formatPercent(phase1Rate) }"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between text-sm mb-2">
+            <span class="font-medium text-gray-700 dark:text-gray-300">Phase 2 · Flashcard 记忆</span>
+            <span class="text-gray-500 dark:text-gray-400">{{ formatPercent(phase2Rate) }}</span>
+          </div>
+          <div class="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <div class="h-full bg-green-500" :style="{ width: formatPercent(phase2Rate) }"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between text-sm mb-2">
+            <span class="font-medium text-gray-700 dark:text-gray-300">Phase 3 · Scenario 对话（预热）</span>
+            <span class="text-gray-500 dark:text-gray-400">{{ formatPercent(phase3Rate) }}</span>
+          </div>
+          <div class="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <div class="h-full bg-purple-500" :style="{ width: formatPercent(phase3Rate) }"></div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">今日任务</h3>
+      <div class="grid md:grid-cols-3 gap-3">
+        <div
+          v-for="task in dailyTasks"
+          :key="task.id"
+          class="rounded-lg border p-3"
+          :class="task.done
+            ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20'
+            : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'"
+        >
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ task.title }}</span>
+            <span>{{ task.done ? '✅' : '⬜' }}</span>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">进度 {{ task.progress }}</p>
+        </div>
+      </div>
+    </div>
+
     <!-- 快速开始 -->
     <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
       <router-link 
@@ -297,12 +353,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import SearchBar from '@/components/SearchBar.vue'
 import { useDictionaryStore } from '@/stores/dictionary'
 import { useLearningStore } from '@/stores/learning'
 import { useShadowStore } from '@/stores/shadow'
 import { useUserStore } from '@/stores/user'
+import { getTodayQuizAttempts } from '@/utils/devspeak-stats'
 
 const dictionaryStore = useDictionaryStore()
 const learningStore = useLearningStore()
@@ -313,6 +370,47 @@ const randomWords = ref([])
 const loading = ref(false)
 const showHelp = ref(false)
 
+
+const todayQuizAttempts = ref(0)
+
+const phase1Rate = computed(() => {
+  if (!shadowStore.totalSentenceCount) return 0
+  return Math.min(shadowStore.totalMasteredSentences / shadowStore.totalSentenceCount, 1)
+})
+
+const phase2Rate = computed(() => Math.min(learningStore.stats.masteredWords / 120, 1))
+const phase3Rate = computed(() => Math.min(todayQuizAttempts.value / 3, 1))
+
+const dailyTasks = computed(() => [
+  {
+    id: 'shadow',
+    title: '跟读 3 句工作表达',
+    progress: `${shadowStore.todayMasteredCount}/3`,
+    done: shadowStore.todayMasteredCount >= 3
+  },
+  {
+    id: 'words',
+    title: '学习 10 个单词',
+    progress: `${learningStore.stats.learnedToday}/10`,
+    done: learningStore.stats.learnedToday >= 10
+  },
+  {
+    id: 'quiz',
+    title: '完成 1 次学习测试',
+    progress: `${todayQuizAttempts.value}/1`,
+    done: todayQuizAttempts.value >= 1
+  }
+])
+
+function formatPercent(rate) {
+  return `${Math.round(rate * 100)}%`
+}
+
+function refreshDashboardStats() {
+  todayQuizAttempts.value = getTodayQuizAttempts()
+}
+
+
 async function loadRandomWords() {
   loading.value = true
   await dictionaryStore.loadRandomWords(6)
@@ -322,6 +420,7 @@ async function loadRandomWords() {
 
 onMounted(() => {
   loadRandomWords()
+  refreshDashboardStats()
 })
 </script>
 
