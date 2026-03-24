@@ -5,7 +5,7 @@
   "description": "基于开源英汉词典的记单词网站，支持跨端数据同步",
   "scripts": {
     "dev": "vite",
-    "build": "npm run build-index && vite build",
+    "build": "npm run build-index && vite build && cp dist/index.html dist/404.html",
     "preview": "vite preview",
     "build-index": "node scripts/build-index.js",
     "process-dictionary": "node scripts/process-dictionary.js"
