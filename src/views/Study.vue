@@ -10,161 +10,247 @@
       </p>
     </div>
 
+    <div v-if="currentLearningGoal" class="ai-goal-banner">
+      <p class="ai-goal-label">AI 学习目标</p>
+      <p class="ai-goal-text">{{ currentLearningGoal }}</p>
+    </div>
+
     <!-- 主要内容区域 -->
-    <div v-if="currentWord" class="main-content">
-      <!-- 左侧：单词信息区域 -->
-      <div class="word-section">
-        <!-- 单词显示 -->
-        <div class="word-display">
-          <div class="word-title">{{ currentWord.word }}</div>
-          <div v-if="currentPhonetic" class="word-phonetic">{{ currentPhonetic }}</div>
-          <div v-else-if="phoneticLoading" class="phonetic-loading">
-            <div class="loading-spinner"></div>
-            <span>加载音标中...</span>
-          </div>
-          <!-- 简洁定义（模糊点击显示） -->
-          <div
-            v-if="currentWord.concise_definition"
-            class="concise-definition-wrapper"
-            @click="showConciseDefinition = !showConciseDefinition"
-          >
-            <div
-              :class="[
-                'concise-definition-text',
-                showConciseDefinition ? 'revealed' : 'blurred'
-              ]"
+    <div v-if="currentWord" class="study-layout">
+      <aside class="session-panel">
+        <div class="session-panel-card">
+          <p class="session-panel-kicker">学习会话面板</p>
+          <h2 class="session-panel-title">{{ currentLearningGoal ? '本轮学习目标' : '本次学习记录' }}</h2>
+          <p v-if="currentLearningGoal" class="session-panel-copy">
+            {{ currentLearningGoal }}
+          </p>
+          <p v-else class="session-panel-copy">
+            当前没有 AI 计划，本面板会继续记录这次学习会话里的内容。
+          </p>
+
+          <section class="session-panel-section">
+            <div class="session-panel-section-header">
+              <h3>推荐词进度</h3>
+              <span v-if="plannedRecommendedWords.length" class="session-panel-badge">
+                {{ plannedRecommendedWordsLearned.length }} / {{ plannedRecommendedWords.length }}
+              </span>
+            </div>
+            <ul v-if="plannedRecommendedWords.length" class="session-word-list">
+              <li
+                v-for="word in plannedRecommendedWords"
+                :key="word"
+                class="session-word-item"
+              >
+                <span>{{ word }}</span>
+                <span class="session-word-state">
+                  {{ learningStore.learnedWordsInSession.includes(word) ? '已学' : '待学' }}
+                </span>
+              </li>
+            </ul>
+            <p v-else class="session-panel-empty">
+              暂无推荐词，先按当前学习会话继续推进。
+            </p>
+          </section>
+
+          <section class="session-panel-section">
+            <div class="session-panel-section-header">
+              <h3>已学词</h3>
+              <span class="session-panel-badge">{{ learningStore.learnedWordsInSession.length }}</span>
+            </div>
+            <ul v-if="learningStore.learnedWordsInSession.length" class="session-word-list compact">
+              <li
+                v-for="word in learningStore.learnedWordsInSession"
+                :key="word"
+                class="session-word-item"
+              >
+                <span>{{ word }}</span>
+              </li>
+            </ul>
+            <p v-else class="session-panel-empty">
+              还没有已学词，先完成当前单词的掌握度打分。
+            </p>
+          </section>
+
+          <div class="session-panel-actions">
+            <router-link
+              v-if="canStartQuiz"
+              to="/study/quiz"
+              class="btn btn-primary"
             >
-              {{ currentWord.concise_definition }}
-            </div>
-            <div class="concise-definition-hint">
-              {{ showConciseDefinition ? '点击隐藏' : '点击显示简洁定义' }}
-            </div>
-          </div>
-        </div>
-
-        <!-- 发音和收藏按钮 -->
-        <div class="action-buttons">
-          <SpeakerButton
-            :word="currentWord.word"
-            :text="currentWord.word"
-            :lang="'en'"
-            :speed="1.0"
-            class="speaker-btn"
-          />
-          <button
-            v-if="userStore.isAuthenticated"
-            @click="toggleCollection"
-            :class="[
-              'collection-btn',
-              isCollected ? 'collected' : 'not-collected'
-            ]"
-          >
-            {{ isCollected ? '⭐ 已收藏' : '☆ 收藏' }}
-          </button>
-          <p v-else class="login-hint">登录后可收藏单词</p>
-        </div>
-
-        <div class="session-navigation">
-          <button
-            class="btn btn-outline text-sm"
-            :disabled="!learningStore.hasPreviousSessionWord"
-            @click="goToPreviousWord"
-          >
-            上一个单词
-          </button>
-          <button
-            class="btn btn-primary text-sm"
-            @click="goToNextWord"
-          >
-            下一个单词
-          </button>
-        </div>
-
-        <!-- 掌握程度选择（桌面端） -->
-        <div class="quality-selection-desktop">
-          <h3 class="quality-title">您对这个单词的掌握程度是？</h3>
-
-          <div class="quality-buttons">
+              开始测试
+            </router-link>
             <button
-              v-for="(option, index) in qualityOptions"
-              :key="option.value"
-              @click="markWord(option.value)"
-              :class="[
-                'quality-btn',
-                `quality-${option.color}`,
-                submitting && 'disabled'
-              ]"
-              :disabled="submitting"
+              v-else
+              class="btn btn-outline opacity-50 cursor-not-allowed"
+              disabled
+              title="先学习再测试"
             >
-              <div class="quality-icon">{{ option.icon }}</div>
-              <div class="quality-label">{{ option.label }}</div>
-              <div class="quality-desc">{{ option.description }}</div>
+              开始测试
             </button>
+            <router-link to="/coach" class="btn btn-outline">
+              返回 AI 教练
+            </router-link>
           </div>
         </div>
-      </div>
+      </aside>
 
-      <!-- 右侧：释义区域 -->
-      <div class="definition-section">
-        <div v-if="!showDefinition" class="definition-placeholder">
-          <button @click="showDefinition = true" class="show-definition-btn">
-            📖 查看释义
-          </button>
-        </div>
-        <div v-else class="definition-content">
-          <div class="definition-header">
-            <h3 class="definition-title">{{ currentWord.word }} 的释义</h3>
-            <button @click="showDefinition = false" class="hide-definition-btn">
-              隐藏释义
-            </button>
-          </div>
-          <div class="definition-body">
-            <div v-for="(def, index) in currentWord.definitions" :key="index" class="definition-item">
-              <div class="part-of-speech">{{ def.pos }}</div>
-              <div class="definition-section-item">
-                <div class="definition-label">英文解释：</div>
-                <div class="definition-text-en">{{ def.explanation_en }}</div>
+      <div class="study-main-column">
+        <div class="main-content">
+          <!-- 左侧：单词信息区域 -->
+          <div class="word-section">
+            <!-- 单词显示 -->
+            <div class="word-display">
+              <div class="word-title">{{ currentWord.word }}</div>
+              <div v-if="currentPhonetic" class="word-phonetic">{{ currentPhonetic }}</div>
+              <div v-else-if="phoneticLoading" class="phonetic-loading">
+                <div class="loading-spinner"></div>
+                <span>加载音标中...</span>
               </div>
-              <div class="definition-section-item">
-                <div class="definition-label">中文解释：</div>
-                <div class="definition-text-cn">{{ def.explanation_cn }}</div>
-              </div>
-              <div v-if="def.example_en" class="example">
-                <div class="example-en">{{ def.example_en }}</div>
-                <div class="example-cn">{{ def.example_cn }}</div>
-              </div>
-            </div>
-
-            <!-- 词形变化 -->
-            <div v-if="currentWord.forms && Object.keys(currentWord.forms).length > 0" class="forms-section">
-              <h4 class="forms-title">词形变化</h4>
-              <div class="forms-list">
+              <!-- 简洁定义（模糊点击显示） -->
+              <div
+                v-if="currentWord.concise_definition"
+                class="concise-definition-wrapper"
+                @click="showConciseDefinition = !showConciseDefinition"
+              >
                 <div
-                  v-for="(value, key) in currentWord.forms"
-                  :key="key"
-                  class="form-item"
+                  :class="[
+                    'concise-definition-text',
+                    showConciseDefinition ? 'revealed' : 'blurred'
+                  ]"
                 >
-                  <span class="form-label">{{ key }}</span>
-                  <span class="form-value">{{ value }}</span>
+                  {{ currentWord.concise_definition }}
+                </div>
+                <div class="concise-definition-hint">
+                  {{ showConciseDefinition ? '点击隐藏' : '点击显示简洁定义' }}
                 </div>
               </div>
             </div>
 
-            <!-- 相似词辨析 -->
-            <div v-if="currentWord.comparison && currentWord.comparison.length > 0" class="comparison-section">
-              <h4 class="comparison-title">相似词辨析</h4>
-              <div class="comparison-list">
-                <div
-                  v-for="(comp, index) in currentWord.comparison"
-                  :key="index"
-                  class="comparison-item"
+            <!-- 发音和收藏按钮 -->
+            <div class="action-buttons">
+              <SpeakerButton
+                :word="currentWord.word"
+                :text="currentWord.word"
+                :lang="'en'"
+                :speed="1.0"
+                class="speaker-btn"
+              />
+              <button
+                v-if="userStore.isAuthenticated"
+                @click="toggleCollection"
+                :class="[
+                  'collection-btn',
+                  isCollected ? 'collected' : 'not-collected'
+                ]"
+              >
+                {{ isCollected ? '⭐ 已收藏' : '☆ 收藏' }}
+              </button>
+              <p v-else class="login-hint">登录后可收藏单词</p>
+            </div>
+
+            <div class="session-navigation">
+              <button
+                class="btn btn-outline text-sm"
+                :disabled="!learningStore.hasPreviousSessionWord"
+                @click="goToPreviousWord"
+              >
+                上一个单词
+              </button>
+              <button
+                class="btn btn-primary text-sm"
+                @click="goToNextWord"
+              >
+                下一个单词
+              </button>
+            </div>
+
+            <!-- 掌握程度选择（桌面端） -->
+            <div class="quality-selection-desktop">
+              <h3 class="quality-title">您对这个单词的掌握程度是？</h3>
+
+              <div class="quality-buttons">
+                <button
+                  v-for="(option, index) in qualityOptions"
+                  :key="option.value"
+                  @click="markWord(option.value)"
+                  :class="[
+                    'quality-btn',
+                    `quality-${option.color}`,
+                    submitting && 'disabled'
+                  ]"
+                  :disabled="submitting"
                 >
-                  <div class="comparison-header">
-                    <span class="comparison-word">{{ currentWord.word }}</span>
-                    <span class="comparison-vs">vs</span>
-                    <span class="comparison-compare">{{ comp.word_to_compare }}</span>
+                  <div class="quality-icon">{{ option.icon }}</div>
+                  <div class="quality-label">{{ option.label }}</div>
+                  <div class="quality-desc">{{ option.description }}</div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右侧：释义区域 -->
+          <div class="definition-section">
+            <div v-if="!showDefinition" class="definition-placeholder">
+              <button @click="showDefinition = true" class="show-definition-btn">
+                📖 查看释义
+              </button>
+            </div>
+            <div v-else class="definition-content">
+              <div class="definition-header">
+                <h3 class="definition-title">{{ currentWord.word }} 的释义</h3>
+                <button @click="showDefinition = false" class="hide-definition-btn">
+                  隐藏释义
+                </button>
+              </div>
+              <div class="definition-body">
+                <div v-for="(def, index) in currentWord.definitions" :key="index" class="definition-item">
+                  <div class="part-of-speech">{{ def.pos }}</div>
+                  <div class="definition-section-item">
+                    <div class="definition-label">英文解释：</div>
+                    <div class="definition-text-en">{{ def.explanation_en }}</div>
                   </div>
-                  <div class="comparison-analysis">{{ comp.analysis }}</div>
+                  <div class="definition-section-item">
+                    <div class="definition-label">中文解释：</div>
+                    <div class="definition-text-cn">{{ def.explanation_cn }}</div>
+                  </div>
+                  <div v-if="def.example_en" class="example">
+                    <div class="example-en">{{ def.example_en }}</div>
+                    <div class="example-cn">{{ def.example_cn }}</div>
+                  </div>
+                </div>
+
+                <!-- 词形变化 -->
+                <div v-if="currentWord.forms && Object.keys(currentWord.forms).length > 0" class="forms-section">
+                  <h4 class="forms-title">词形变化</h4>
+                  <div class="forms-list">
+                    <div
+                      v-for="(value, key) in currentWord.forms"
+                      :key="key"
+                      class="form-item"
+                    >
+                      <span class="form-label">{{ key }}</span>
+                      <span class="form-value">{{ value }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 相似词辨析 -->
+                <div v-if="currentWord.comparison && currentWord.comparison.length > 0" class="comparison-section">
+                  <h4 class="comparison-title">相似词辨析</h4>
+                  <div class="comparison-list">
+                    <div
+                      v-for="(comp, index) in currentWord.comparison"
+                      :key="index"
+                      class="comparison-item"
+                    >
+                      <div class="comparison-header">
+                        <span class="comparison-word">{{ currentWord.word }}</span>
+                        <span class="comparison-vs">vs</span>
+                        <span class="comparison-compare">{{ comp.word_to_compare }}</span>
+                      </div>
+                      <div class="comparison-analysis">{{ comp.analysis }}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -210,7 +296,7 @@
     <div v-else-if="error" class="error-state">
       <div class="text-4xl mb-4">❌</div>
       <p class="text-red-600 dark:text-red-400 mb-4">{{ error }}</p>
-      <button @click="loadRandomWord" class="btn btn-primary">
+      <button @click="loadStudyWord" class="btn btn-primary">
         重试
       </button>
     </div>
@@ -243,15 +329,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import SpeakerButton from '@/components/SpeakerButton.vue'
 import { useDictionaryStore } from '@/stores/dictionary'
+import { useAICoachStore } from '@/stores/aiCoach'
 import { useLearningStore } from '@/stores/learning'
 import { useUserStore } from '@/stores/user'
 import { simpleQualityOptions } from '@/utils/sm2'
 import { getPhonetic } from '@/utils/phonetic'
+import {
+  canStartPlannedQuiz,
+  getLearnedRecommendedWords,
+  getNextRecommendedWord,
+  mergeRecommendedWords,
+} from '@/utils/learning-workflow'
 
 const dictionaryStore = useDictionaryStore()
+const aiCoachStore = useAICoachStore()
 const learningStore = useLearningStore()
 const userStore = useUserStore()
 
@@ -264,15 +358,39 @@ const showDefinition = ref(false)
 const showConciseDefinition = ref(false)
 const currentPhonetic = ref('')
 const phoneticLoading = ref(false)
+const invalidRecommendedWords = ref([])
 
 const qualityOptions = simpleQualityOptions
+const plannedRecommendedWords = computed(() =>
+  mergeRecommendedWords(
+    aiCoachStore.dailyPlan && Array.isArray(aiCoachStore.dailyPlan.recommendedWords)
+      ? aiCoachStore.dailyPlan.recommendedWords
+      : aiCoachStore.recommendedWords,
+    []
+  )
+)
+const currentLearningGoal = computed(() => aiCoachStore.currentLearningGoal || '')
+const plannedRecommendedWordsLearned = computed(() =>
+  getLearnedRecommendedWords(
+    plannedRecommendedWords.value,
+    learningStore.learnedWordsInSession
+  )
+)
+const plannedRecommendedWordsMinimum = computed(() =>
+  plannedRecommendedWords.value.length > 0 ? Math.max(1, Math.min(plannedRecommendedWords.value.length, 5)) : 0
+)
+const canStartQuiz = computed(() => {
+  if (aiCoachStore.isPlannedStudyActive) {
+    return aiCoachStore.activeRun?.currentStage === 'quiz_ready'
+  }
+
+  return learningStore.learnedWordsInSession.length > 0
+})
 
 const isCollected = computed(() => {
   if (!currentWord.value) return false
   return learningStore.isCollected(currentWord.value.word)
 })
-
-const canStartQuiz = computed(() => learningStore.learnedWordsInSession.length > 0)
 
 function resetWordPanels() {
   showDefinition.value = false
@@ -288,6 +406,16 @@ async function applyWord(wordData, { trackInSession = true } = {}) {
   }
   resetWordPanels()
   await fetchPhonetic()
+}
+
+async function loadWordByText(word) {
+  const wordData = await dictionaryStore.getWordDetail(word)
+  if (!wordData) {
+    return false
+  }
+
+  await applyWord(wordData, { trackInSession: true })
+  return true
 }
 
 // 获取音标
@@ -306,23 +434,50 @@ async function fetchPhonetic() {
   }
 }
 
-// 加载随机单词
-async function loadRandomWord() {
+async function loadRecommendedWord() {
+  while (true) {
+    const candidateWord = getNextRecommendedWord(
+      plannedRecommendedWords.value,
+      learningStore.sessionQueue,
+      invalidRecommendedWords.value
+    )
+
+    if (!candidateWord) {
+      return false
+    }
+
+    const loaded = await loadWordByText(candidateWord)
+    if (loaded) {
+      return true
+    }
+
+    invalidRecommendedWords.value = [...invalidRecommendedWords.value, candidateWord]
+  }
+}
+
+async function loadFallbackRandomWord() {
+  const words = await dictionaryStore.loadRandomWords(1)
+  if (!words || words.length === 0) {
+    error.value = '无法加载单词'
+    return
+  }
+
+  const loaded = await loadWordByText(words[0].word)
+  if (!loaded) {
+    error.value = '无法加载单词详情'
+  }
+}
+
+// 优先加载 AI 推荐词，没有时回退随机单词
+async function loadStudyWord() {
   loading.value = true
   error.value = null
   resetWordPanels()
 
   try {
-    const words = await dictionaryStore.loadRandomWords(1)
-    if (words && words.length > 0) {
-      const wordData = await dictionaryStore.getWordDetail(words[0].word)
-      if (!wordData) {
-        error.value = '无法加载单词详情'
-        return
-      }
-      await applyWord(wordData, { trackInSession: true })
-    } else {
-      error.value = '无法加载单词'
+    const loadedRecommendedWord = await loadRecommendedWord()
+    if (!loadedRecommendedWord) {
+      await loadFallbackRandomWord()
     }
   } catch (err) {
     error.value = '加载单词失败: ' + err.message
@@ -350,7 +505,7 @@ async function goToPreviousWord() {
 async function goToNextWord() {
   const nextWord = learningStore.goToNextSessionWord()
   if (!nextWord) {
-    await loadRandomWord()
+    await loadStudyWord()
     return
   }
 
@@ -380,6 +535,20 @@ async function markWord(quality) {
     if (!result.success) {
       console.error('保存学习进度失败')
     }
+  }
+
+  if (
+    plannedRecommendedWordsMinimum.value > 0 &&
+    canStartPlannedQuiz({
+      recommendedWords: plannedRecommendedWords.value,
+      learnedWords: learningStore.learnedWordsInSession,
+      minimum: plannedRecommendedWordsMinimum.value,
+    })
+  ) {
+    await aiCoachStore.markPlanTaskDone('study', {
+      learnedWords: plannedRecommendedWordsLearned.value,
+      minimum: plannedRecommendedWordsMinimum.value,
+    })
   }
 
   learnedCount.value++
@@ -417,8 +586,15 @@ function handleKeyPress(e) {
 }
 
 onMounted(() => {
-  loadRandomWord()
+  if (plannedRecommendedWords.value.length > 0) {
+    aiCoachStore.startPlannedStudy()
+  }
+  loadStudyWord()
   window.addEventListener('keydown', handleKeyPress)
+})
+
+watch(plannedRecommendedWords, (words) => {
+  invalidRecommendedWords.value = invalidRecommendedWords.value.filter(word => words.includes(word))
 })
 
 onUnmounted(() => {
@@ -439,19 +615,226 @@ onUnmounted(() => {
   padding: 0 clamp(0.5rem, 2vw, 1rem);
 }
 
+.ai-goal-banner {
+  max-width: 900px;
+  margin: 0 auto 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.95), rgba(239, 246, 255, 0.9));
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+.dark .ai-goal-banner {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.92));
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+.ai-goal-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.dark .ai-goal-label {
+  color: #93c5fd;
+}
+
+.ai-goal-text {
+  margin: 0;
+  font-size: clamp(0.95rem, 2vw, 1.05rem);
+  line-height: 1.6;
+  color: #1e3a8a;
+}
+
+.dark .ai-goal-text {
+  color: #e0f2fe;
+}
+
+.study-layout {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 0 clamp(0.5rem, 2vw, 1rem);
+}
+
+.study-main-column {
+  min-width: 0;
+}
+
+.session-panel {
+  min-width: 0;
+}
+
+.session-panel-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.dark .session-panel-card {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.95));
+  border-color: rgba(96, 165, 250, 0.22);
+  box-shadow: none;
+}
+
+.session-panel-kicker {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.dark .session-panel-kicker {
+  color: #93c5fd;
+}
+
+.session-panel-title {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #111827;
+}
+
+.dark .session-panel-title {
+  color: #f8fafc;
+}
+
+.session-panel-copy,
+.session-panel-empty {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.dark .session-panel-copy,
+.dark .session-panel-empty {
+  color: #cbd5e1;
+}
+
+.session-panel-section {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+.session-panel-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.session-panel-section-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #1f2937;
+}
+
+.dark .session-panel-section-header h3 {
+  color: #f8fafc;
+}
+
+.session-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.dark .session-panel-badge {
+  background: rgba(96, 165, 250, 0.18);
+  color: #bfdbfe;
+}
+
+.session-word-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-word-list.compact {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+
+.session-word-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: #111827;
+}
+
+.dark .session-word-item {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #e5e7eb;
+}
+
+.session-word-state {
+  font-size: 0.8rem;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.dark .session-word-state {
+  color: #93c5fd;
+}
+
+.session-panel-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
 /* 主要内容区域 - 响应式左右布局 */
 .main-content {
   display: grid;
   grid-template-columns: 1fr;
   gap: clamp(1rem, 4vw, 3rem);
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 clamp(0.5rem, 2vw, 1rem);
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 @media (min-width: 768px) {
   .main-content {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1200px) {
+  .study-layout {
+    grid-template-columns: minmax(0, 2.2fr) minmax(300px, 360px);
+    align-items: start;
+  }
+
+  .session-panel {
+    order: 2;
+  }
+
+  .session-panel-card {
+    position: sticky;
+    top: 1.5rem;
   }
 }
 
@@ -1256,4 +1639,3 @@ onUnmounted(() => {
   background: #9ca3af;
 }
 </style>
-

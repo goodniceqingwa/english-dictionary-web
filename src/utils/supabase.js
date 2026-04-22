@@ -1,9 +1,87 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL ?? ''
+const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY ?? ''
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+function createSupabaseFallbackClient() {
+  const createError = () => new Error('Supabase client is not configured')
+
+  function createQueryBuilder() {
+    const builder = {
+      select: () => builder,
+      insert: () => builder,
+      update: () => builder,
+      upsert: () => builder,
+      delete: () => builder,
+      eq: () => builder,
+      lte: () => builder,
+      order: () => builder,
+      limit: () => builder,
+      maybeSingle: async () => ({ data: null, error: createError() }),
+      single: async () => ({ data: null, error: createError() }),
+    }
+
+    return builder
+  }
+
+  return {
+    auth: {
+      signUp: async () => ({ data: null, error: createError() }),
+      signInWithPassword: async () => ({ data: null, error: createError() }),
+      signInWithOAuth: async () => ({ data: null, error: createError() }),
+      signOut: async () => ({ error: createError() }),
+      getUser: async () => ({ data: { user: null }, error: createError() }),
+      onAuthStateChange() {
+        return {
+          data: {
+            subscription: {
+              unsubscribe() {},
+            },
+          },
+        }
+      },
+    },
+    from() {
+      return createQueryBuilder()
+    },
+    functions: {
+      invoke: async () => ({ data: null, error: createError() }),
+    },
+  }
+}
+
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createSupabaseFallbackClient()
+
+const UNIQUE_CONSTRAINT_ERROR_CODES = new Set(['23505'])
+
+const WORKFLOW_RUN_FIELD_MAP = {
+  currentStage: 'current_stage',
+  planJson: 'plan_json',
+  reflectionJson: 'reflection_json',
+  startedAt: 'started_at',
+  completedAt: 'completed_at',
+}
+
+function isUniqueConstraintError(error) {
+  if (!error) {
+    return false
+  }
+
+  return UNIQUE_CONSTRAINT_ERROR_CODES.has(error.code)
+    || /duplicate key value|unique constraint/i.test(error.message || '')
+}
+
+function serializeWorkflowRunPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return payload
+  }
+
+  return Object.fromEntries(
+    Object.entries(payload).map(([key, value]) => [WORKFLOW_RUN_FIELD_MAP[key] || key, value])
+  )
+}
 
 // 用户认证相关
 export const auth = {
@@ -27,8 +105,14 @@ export const auth = {
 
   // Google OAuth 登录
   async signInWithGoogle() {
+    // 显式指定回调，避免依赖 Supabase Site URL 静态配置
+    // dev → http://localhost:5173/，生产 → https://<user>.github.io/english-dictionary-web/
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}${import.meta.env.BASE_URL}`
+      : undefined
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
+      options: redirectTo ? { redirectTo } : undefined,
     })
     return { data, error }
   },
@@ -168,3 +252,104 @@ export const progress = {
   }
 }
 
+// AI 学习画像相关
+export const aiProfiles = {
+  async getProfile(userId) {
+    return supabase
+      .from('user_ai_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+  },
+
+  async upsertProfile(payload) {
+    const { data: updatedProfile, error: updateError } = await supabase
+      .from('user_ai_profiles')
+      .update(payload)
+      .eq('user_id', payload.user_id)
+      .select()
+      .maybeSingle()
+
+    if (updatedProfile || updateError) {
+      return { data: updatedProfile, error: updateError }
+    }
+
+    const { data: insertedProfile, error: insertError } = await supabase
+      .from('user_ai_profiles')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (!insertError || !isUniqueConstraintError(insertError)) {
+      return { data: insertedProfile, error: insertError }
+    }
+
+    return supabase
+      .from('user_ai_profiles')
+      .update(payload)
+      .eq('user_id', payload.user_id)
+      .select()
+      .single()
+  },
+}
+
+// 学习工作流相关
+export const workflowRuns = {
+  async createRun(payload) {
+    const serializedPayload = serializeWorkflowRunPayload(payload)
+
+    return supabase
+      .from('learning_workflow_runs')
+      .insert(serializedPayload)
+      .select()
+      .single()
+  },
+
+  async getLatestRun(userId) {
+    return supabase
+      .from('learning_workflow_runs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  },
+
+  async getRunById(runId) {
+    return supabase
+      .from('learning_workflow_runs')
+      .select('*')
+      .eq('id', runId)
+      .maybeSingle()
+  },
+
+  async updateRun(runId, payload) {
+    const serializedPayload = serializeWorkflowRunPayload(payload)
+
+    return supabase
+      .from('learning_workflow_runs')
+      .update(serializedPayload)
+      .eq('id', runId)
+      .select()
+      .single()
+  },
+}
+
+export const workflowEvents = {
+  async getRunEvents(runId) {
+    return supabase
+      .from('learning_workflow_events')
+      .select('*')
+      .eq('run_id', runId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+  },
+
+  async addEvent(payload) {
+    return supabase
+      .from('learning_workflow_events')
+      .insert(payload)
+      .select()
+      .single()
+  },
+}

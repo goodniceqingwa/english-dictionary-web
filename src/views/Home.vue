@@ -107,8 +107,55 @@
       </div>
     </div>
 
+    <div class="card mb-12">
+      <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div class="max-w-2xl">
+          <p class="font-mono text-sm text-primary-600 dark:text-primary-300 mb-3">$ coach --today</p>
+          <div class="flex flex-wrap items-center gap-3 mb-2">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">今日 AI 计划摘要</h2>
+            <span class="inline-flex items-center rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
+              AI 当前阶段 · {{ coachStageLabel }}
+            </span>
+          </div>
+          <p class="text-gray-600 dark:text-gray-400 leading-7">
+            {{ aiPlanSummary }}
+          </p>
+
+          <div v-if="userStore.isAuthenticated" class="grid gap-3 mt-5 sm:grid-cols-3">
+            <div
+              v-for="metric in coachSummaryMetrics"
+              :key="metric.label"
+              class="rounded-xl border border-primary-100 bg-white/80 px-4 py-3 dark:border-primary-900 dark:bg-gray-900/30"
+            >
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {{ metric.label }}
+              </p>
+              <p class="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">
+                {{ metric.value }}
+              </p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ metric.hint }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="shrink-0 rounded-xl border border-primary-100 bg-primary-50/70 px-4 py-3 text-sm text-primary-700 dark:border-primary-900 dark:bg-primary-900/20 dark:text-primary-200">
+          <p class="font-semibold mb-1">AI 教练会帮你整理什么？</p>
+          <p>{{ coachPrimaryAction.description }}</p>
+          <router-link
+            v-if="userStore.isAuthenticated"
+            :to="coachPrimaryAction.to"
+            class="mt-3 inline-flex items-center rounded-full bg-primary-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-primary-700"
+          >
+            {{ coachPrimaryAction.label }}
+          </router-link>
+        </div>
+      </div>
+    </div>
+
     <!-- 快速开始 -->
-    <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
+    <div class="grid md:grid-cols-2 xl:grid-cols-5 gap-6 mb-12">
       <router-link 
         to="/study"
         class="card hover:shadow-xl transition-shadow cursor-pointer group"
@@ -138,6 +185,42 @@
             </h3>
             <p class="text-gray-600 dark:text-gray-400 mt-1">
               聚焦计算机相关英语词汇
+            </p>
+          </div>
+        </div>
+      </router-link>
+
+      <router-link 
+        v-if="userStore.isAuthenticated"
+        to="/coach"
+        class="card hover:shadow-xl transition-shadow cursor-pointer group"
+      >
+        <div class="flex items-center justify-center space-x-4 w-full">
+          <div class="text-5xl">🤖</div>
+          <div class="flex-1 text-center">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+              AI 学习教练
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">
+              生成今日计划，串联画像、练习与复盘
+            </p>
+          </div>
+        </div>
+      </router-link>
+
+      <router-link 
+        v-else
+        to="/auth?redirect=/coach"
+        class="card hover:shadow-xl transition-shadow cursor-pointer group"
+      >
+        <div class="flex items-center justify-center space-x-4 w-full">
+          <div class="text-5xl">🤖</div>
+          <div class="flex-1 text-center">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+              AI 学习教练
+            </h3>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">
+              登录后生成个性化学习计划与任务建议
             </p>
           </div>
         </div>
@@ -355,12 +438,14 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import SearchBar from '@/components/SearchBar.vue'
+import { useAICoachStore } from '@/stores/aiCoach'
 import { useDictionaryStore } from '@/stores/dictionary'
 import { useLearningStore } from '@/stores/learning'
 import { useShadowStore } from '@/stores/shadow'
 import { useUserStore } from '@/stores/user'
 import { getTodayQuizAttempts } from '@/utils/devspeak-stats'
 
+const coachStore = useAICoachStore()
 const dictionaryStore = useDictionaryStore()
 const learningStore = useLearningStore()
 const shadowStore = useShadowStore()
@@ -380,6 +465,146 @@ const phase1Rate = computed(() => {
 
 const phase2Rate = computed(() => Math.min(learningStore.stats.masteredWords / 120, 1))
 const phase3Rate = computed(() => Math.min(todayQuizAttempts.value / 3, 1))
+const coachStageLabel = computed(() => {
+  const stageLabels = {
+    idle: '尚未开始',
+    profile_ready: '画像已保存',
+    plan_ready: '计划已生成',
+    studying: '学习中',
+    quiz_ready: '可开始测验',
+    reflecting: '复盘中',
+    completed: '已完成',
+  }
+
+  return stageLabels[coachStore.activeRun?.currentStage] || '尚未开始'
+})
+const learnedRecommendedCount = computed(() => {
+  const learnedSet = new Set(
+    Array.isArray(learningStore.learnedWordsInSession)
+      ? learningStore.learnedWordsInSession
+      : []
+  )
+
+  return coachStore.recommendedWords.filter(word => learnedSet.has(word)).length
+})
+const completedCoachTaskCount = computed(() =>
+  Array.isArray(coachStore.dailyPlan?.tasks)
+    ? coachStore.dailyPlan.tasks.filter(task => task?.done).length
+    : 0
+)
+const coachSummaryMetrics = computed(() => [
+  {
+    label: '任务完成',
+    value: `${completedCoachTaskCount.value}/${Array.isArray(coachStore.dailyPlan?.tasks) ? coachStore.dailyPlan.tasks.length : 0}`,
+    hint: coachStore.dailyPlan?.tasks?.length ? '本轮计划任务' : '等待生成计划',
+  },
+  {
+    label: '推荐词进度',
+    value: `${learnedRecommendedCount.value}/${coachStore.recommendedWords.length || 0}`,
+    hint: coachStore.recommendedWords.length ? '本轮已学推荐词' : '暂无推荐词',
+  },
+  {
+    label: '下一步',
+    value: coachStageLabel.value,
+    hint: coachStore.reflection?.summary ? '本轮已有复盘摘要' : '按阶段继续推进',
+  },
+])
+const coachPrimaryAction = computed(() => {
+  if (!userStore.isAuthenticated) {
+    return {
+      label: '登录后开始',
+      to: '/auth?redirect=/coach',
+      description: '登录后即可让 AI 教练基于你的学习目标生成计划并继续推进学习闭环。',
+    }
+  }
+
+  const stage = coachStore.activeRun?.currentStage || 'idle'
+  if (stage === 'quiz_ready') {
+    return {
+      label: '开始学习测验',
+      to: '/study/quiz',
+      description: '已达到测验条件，下一步进入学习测试完成答题和批改。',
+    }
+  }
+
+  if (stage === 'reflecting') {
+    return {
+      label: '返回 AI 教练',
+      to: '/coach',
+      description: '测验已经完成，回到教练页整理复盘摘要和下一步建议。',
+    }
+  }
+
+  if (stage === 'plan_ready' || stage === 'studying') {
+    return {
+      label: stage === 'studying' ? '继续学习' : '进入学习模式',
+      to: '/study',
+      description: '计划已经就绪，下一步去学习页推进推荐词和计划任务。',
+    }
+  }
+
+  if (stage === 'completed') {
+    return {
+      label: '查看 AI 教练',
+      to: '/coach',
+      description: '这一轮已经结束，可以查看复盘结果或生成下一轮计划。',
+    }
+  }
+
+  return {
+    label: '生成今日计划',
+    to: '/coach',
+    description: '学习目标、今日任务和复盘提醒都会集中在教练页中。',
+  }
+})
+
+function getFirstPlanGoalText(goals) {
+  if (!Array.isArray(goals) || goals.length === 0) {
+    return ''
+  }
+
+  const firstGoal = goals[0]
+  if (typeof firstGoal === 'string') {
+    return firstGoal.trim()
+  }
+
+  if (firstGoal && typeof firstGoal === 'object') {
+    return [firstGoal.title, firstGoal.summary, firstGoal.focus, firstGoal.text]
+      .find((value) => typeof value === 'string' && value.trim())
+      ?.trim() || ''
+  }
+
+  return ''
+}
+
+const aiPlanSummary = computed(() => {
+  if (!userStore.isAuthenticated) {
+    return '登录后即可让 AI 教练基于你的学习目标生成今日计划、练习重点和复盘提醒。'
+  }
+
+  if (typeof coachStore.dailyPlan === 'string' && coachStore.dailyPlan.trim()) {
+    return coachStore.dailyPlan.trim()
+  }
+
+  if (coachStore.dailyPlan && typeof coachStore.dailyPlan === 'object') {
+    const structuredSummary = [
+      coachStore.dailyPlan.sessionTitle,
+      coachStore.dailyPlan.focus,
+      coachStore.dailyPlan.summary,
+      getFirstPlanGoalText(coachStore.dailyPlan.goals)
+    ].find((value) => typeof value === 'string' && value.trim())
+
+    if (structuredSummary) {
+      return structuredSummary.trim()
+    }
+  }
+
+  if (coachStore.profile?.goal) {
+    return `当前优先聚焦“${coachStore.profile.goal}”，进入教练页即可继续生成今天的专属安排。`
+  }
+
+  return '今天还没有生成 AI 计划，进入教练页后可以快速整理目标、任务和下一步建议。'
+})
 
 const dailyTasks = computed(() => [
   {
@@ -450,4 +675,3 @@ kbd {
   border-color: #4b5563;
 }
 </style>
-

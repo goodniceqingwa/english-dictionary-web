@@ -44,6 +44,13 @@
                 跟读训练
               </router-link>
               <router-link 
+                to="/coach" 
+                class="nav-link"
+                :class="{ 'active': $route.path.startsWith('/coach') }"
+              >
+                AI 教练
+              </router-link>
+              <router-link 
                 v-if="userStore.isAuthenticated"
                 to="/review" 
                 class="nav-link"
@@ -144,6 +151,13 @@
               跟读训练
             </router-link>
             <router-link 
+              to="/coach" 
+              class="block px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              @click="mobileMenuOpen = false"
+            >
+              AI 教练
+            </router-link>
+            <router-link 
               v-if="userStore.isAuthenticated"
               to="/review" 
               class="block px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -208,12 +222,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useAICoachStore } from '@/stores/aiCoach'
 import { useUserStore } from '@/stores/user'
 import { useLearningStore } from '@/stores/learning'
 import { useDictionaryStore } from '@/stores/dictionary'
 import NetworkStatus from '@/components/NetworkStatus.vue'
 import { auth } from '@/utils/supabase'
 
+const aiCoachStore = useAICoachStore()
 const userStore = useUserStore()
 const learningStore = useLearningStore()
 const dictionaryStore = useDictionaryStore()
@@ -249,20 +265,23 @@ onMounted(async () => {
     learningStore.loadCollections()
     learningStore.loadProgress()
     learningStore.loadStats()
+    await aiCoachStore.loadCoachState(userStore.user?.id)
   }
 
   // 监听认证状态变化
-  auth.onAuthStateChange((event, session) => {
+  auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN') {
       userStore.user = session?.user || null
       // 从缓存加载数据，然后后台同步
       learningStore.loadCollections()
       learningStore.loadProgress()
       learningStore.loadStats()
+      await aiCoachStore.loadCoachState(userStore.user?.id)
     } else if (event === 'SIGNED_OUT') {
       userStore.user = null
       // 清除用户数据但保留缓存（下次登录可用）
       learningStore.clearUserData()
+      aiCoachStore.resetCoachState()
     }
   })
 
