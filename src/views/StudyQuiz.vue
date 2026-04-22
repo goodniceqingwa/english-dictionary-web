@@ -86,9 +86,11 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useAICoachStore } from '@/stores/aiCoach'
 import { useLearningStore } from '@/stores/learning'
 import { recordQuizAttempt } from '@/utils/devspeak-stats'
 
+const aiCoachStore = useAICoachStore()
 const learningStore = useLearningStore()
 
 const currentQuestionIndex = ref(0)
@@ -97,11 +99,20 @@ const answers = ref([])
 const selectedOption = ref('')
 const spellingInput = ref('')
 const hasRecordedAttempt = ref(false)
+const hasSyncedCoachResults = ref(false)
 
 const hasLearnedWords = computed(() => learningStore.learnedWordsInSession.length > 0)
 const currentQuestion = computed(() => questions.value[currentQuestionIndex.value] || null)
 const totalCount = computed(() => questions.value.length)
 const correctCount = computed(() => answers.value.filter(item => item.correct).length)
+const learnedWordsForQuiz = computed(() => learningStore.learnedWordsInSession.filter(Boolean))
+const planTasks = computed(() =>
+  Array.isArray(aiCoachStore.dailyPlan?.tasks)
+    ? aiCoachStore.dailyPlan.tasks
+      .map(task => String(task?.title || task?.instructions || task?.taskType || '').trim())
+      .filter(Boolean)
+    : []
+)
 const accuracy = computed(() => {
   if (!totalCount.value) return 0
   return Math.round((correctCount.value / totalCount.value) * 100)
@@ -117,6 +128,22 @@ const wrongAnswers = computed(() =>
       correctAnswer: item.question.correctAnswer
     }))
 )
+const contextualQuestions = computed(() =>
+  aiCoachStore.activeRun?.currentStage === 'quiz_ready' &&
+  Array.isArray(aiCoachStore.quizRequest?.contextualQuestions)
+    ? aiCoachStore.quizRequest.contextualQuestions
+    : []
+)
+
+function buildQuizAnswerSummary() {
+  return answers.value.map((item) => ({
+    question: item.question.title,
+    type: item.question.type,
+    userAnswer: item.userAnswer,
+    correctAnswer: item.question.correctAnswer,
+    correct: item.correct
+  }))
+}
 
 function normalizeAnswer(value) {
   return String(value || '').trim().toLowerCase()
@@ -149,7 +176,7 @@ function buildQuestions() {
   const picked = shuffle(learnedWordDetails).slice(0, Math.min(10, learnedWordDetails.length))
   const chinesePool = learnedWordDetails.map(getChineseDefinition).filter(Boolean)
 
-  return picked.map((wordDetail) => {
+  const baseQuestions = picked.map((wordDetail) => {
     const type = Math.random() < 0.5 ? 'choice' : 'spelling'
     const chinese = getChineseDefinition(wordDetail)
 
@@ -170,6 +197,8 @@ function buildQuestions() {
       correctAnswer: wordDetail.word
     }
   })
+
+  return [...baseQuestions, ...contextualQuestions.value]
 }
 
 function submitAnswer() {
@@ -197,6 +226,16 @@ function submitAnswer() {
 
 function restartQuiz() {
   hasRecordedAttempt.value = false
+  hasSyncedCoachResults.value = false
+
+  if (aiCoachStore.activeRun?.currentStage === 'quiz_ready') {
+    aiCoachStore.generateQuiz({
+      runId: aiCoachStore.activeRun?.runId,
+      learnedWords: learnedWordsForQuiz.value,
+      planTasks: planTasks.value,
+    })
+  }
+
   questions.value = buildQuestions()
   answers.value = []
   currentQuestionIndex.value = 0
@@ -204,10 +243,38 @@ function restartQuiz() {
   spellingInput.value = ''
 }
 
-watch(quizCompleted, (completed) => {
-  if (!completed || hasRecordedAttempt.value) return
-  recordQuizAttempt()
-  hasRecordedAttempt.value = true
+watch(quizCompleted, async (completed) => {
+  if (!completed) return
+
+  if (!hasRecordedAttempt.value) {
+    recordQuizAttempt()
+    hasRecordedAttempt.value = true
+  }
+
+  if (hasSyncedCoachResults.value) {
+    return
+  }
+
+  const quizAnswers = buildQuizAnswerSummary()
+  const savedQuizResults = await aiCoachStore.saveQuizResults({
+    runId: aiCoachStore.activeRun?.runId,
+    learnedWords: learnedWordsForQuiz.value,
+    answers: quizAnswers,
+    wrongAnswers: wrongAnswers.value,
+    accuracy: accuracy.value,
+    correctCount: correctCount.value,
+    totalCount: totalCount.value,
+  })
+
+  if (savedQuizResults) {
+    await aiCoachStore.summarizeReflection({
+      runId: aiCoachStore.activeRun?.runId,
+      learnedWords: learnedWordsForQuiz.value,
+      quizAnswers,
+    })
+  }
+
+  hasSyncedCoachResults.value = true
 })
 
 if (hasLearnedWords.value) {

@@ -1,0 +1,4 @@
+project_id = "english-dictionary-web"
+
+[functions.learning-workflow]
+verify_jwt = false

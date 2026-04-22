@@ -33,6 +33,12 @@ const routes = [
     meta: { title: '跟读训练' }
   },
   {
+    path: '/coach',
+    name: 'AICoach',
+    component: () => import('@/views/AICoach.vue'),
+    meta: { title: 'AI 学习教练', requiresAuth: true }
+  },
+  {
     path: '/review',
     name: 'Review',
     component: () => import('@/views/Review.vue'),
